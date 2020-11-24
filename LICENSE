@@ -1,15 +1,157 @@
-PHPWord, a pure PHP library for reading and writing word processing documents.
+protected $_rels;
+    protected $_types;
+Let us proceed to change the file TemplateProcessor.php
+public function __construct($documentTemplate)
+{
+//add to this function
 
-Copyright (c) 2010-2016 PHPWord.
+$this->_countRels=100; //start id for relationship between image and document.xml
+}
 
-PHPWord is free software: you can redistribute it and/or modify
-it under the terms of the GNU Lesser General Public License version 3 as published by
-the Free Software Foundation.
+public function save()
+{
+//add to this function after $this->zipClass->addFromString('word/document.xml', $this->tempDocumentMainPart);
 
-PHPWord is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE. See the
-GNU Lesser General Public License version 3 for more details.
+if($this->_rels!="")
+{
+    $this->zipClass->addFromString('word/_rels/document.xml.rels', $this->_rels);
+}
+if($this->_types!="")
+{
+    $this->zipClass->addFromString('[Content_Types].xml', $this->_types);
+}
+}
 
-You should have received a copy of the GNU Lesser General Public License version 3
-along with PHPWord. If not, see <http://www.gnu.org/licenses/>.
+//add function
+
+public function setImg( $strKey, $img){
+        $strKey = '${'.$strKey.'}';
+        $relationTmpl = '<Relationship Id="RID" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/IMG"/>';
+
+        $imgTmpl = '<w:pict><v:shape type="#_x0000_t75" style="width:WIDpx;height:HEIpx"><v:imagedata r:id="RID" o:title=""/></v:shape></w:pict>';
+
+        $toAdd = $toAddImg = $toAddType = '';
+        $aSearch = array('RID', 'IMG');
+        $aSearchType = array('IMG', 'EXT');
+        $countrels=$this->_countRels++;
+        //I'm work for jpg files, if you are working with other images types -> Write conditions here
+    $imgExt = 'jpg';
+        $imgName = 'img' . $countrels . '.' . $imgExt;
+
+            $this->zipClass->deleteName('word/media/' . $imgName);
+            $this->zipClass->addFile($img['src'], 'word/media/' . $imgName);
+
+            $typeTmpl = '<Override PartName="/word/media/'.$imgName.'" ContentType="image/EXT"/>';
+
+
+            $rid = 'rId' . $countrels;
+            $countrels++;
+        list($w,$h) = getimagesize($img['src']);
+
+ if(isset($img['swh'])) //Image proportionally larger side
+ {
+ if($w<=$h)
+ {
+    $ht=(int)$img['swh'];
+    $ot=$w/$h;
+    $wh=(int)$img['swh']*$ot;
+    $wh=round($wh);
+ }
+ if($w>=$h)
+ {
+    $wh=(int)$img['swh'];
+    $ot=$h/$w;
+    $ht=(int)$img['swh']*$ot;
+    $ht=round($ht);
+ }
+ $w=$wh;
+ $h=$ht;
+ }
+
+if(isset($img['size']))
+{
+$w = $img['size'][0];
+$h = $img['size'][1];           
+}
+
+
+            $toAddImg .= str_replace(array('RID', 'WID', 'HEI'), array($rid, $w, $h), $imgTmpl) ;
+            if(isset($img['dataImg']))
+            {
+                $toAddImg.='<w:br/><w:t>'.$this->limpiarString($img['dataImg']).'</w:t><w:br/>';
+            }
+
+            $aReplace = array($imgName, $imgExt);
+            $toAddType .= str_replace($aSearchType, $aReplace, $typeTmpl) ;
+
+            $aReplace = array($rid, $imgName);
+            $toAdd .= str_replace($aSearch, $aReplace, $relationTmpl);
+
+
+        $this->tempDocumentMainPart=str_replace('<w:t>' . $strKey . '</w:t>', $toAddImg, $this->tempDocumentMainPart);
+        //print $this->tempDocumentMainPart;
+
+
+
+        if($this->_rels=="")
+        {
+            $this->_rels=$this->zipClass->getFromName('word/_rels/document.xml.rels');
+            $this->_types=$this->zipClass->getFromName('[Content_Types].xml');
+        }
+
+        $this->_types       = str_replace('</Types>', $toAddType, $this->_types) . '</Types>';
+                $this->_rels        = str_replace('</Relationships>', $toAdd, $this->_rels) . '</Relationships>';
+}
+//add function
+
+function limpiarString($str) {
+        return str_replace(
+                array('&', '<', '>', "\n"), 
+                array('&amp;', '&lt;', '&gt;', "\n" . '<w:br/>'), 
+                $str
+        );
+}
+//HOW TO USE???
+
+$templateProcessor = new \PhpOffice\PhpWord\TemplateProcessor('templ.docx');
+
+//static zone
+$templateProcessor->setValue('date', htmlspecialchars(date('d.m.Y G:i:s')));    
+//$templateProcessor->cloneRow('NAME_IN_TEMPLATE', NUMBER_OF_TABLE_RECORDS);
+$templateProcessor->cloneRow('AVTOR', 3);
+
+//variant 1
+//dynamic zone
+$templateProcessor->setValue('AVTOR#1', htmlspecialchars('Garry'));
+$templateProcessor->setValue('NAME#1', htmlspecialchars('Black Horse'));
+$templateProcessor->setValue('SIZES#1', htmlspecialchars('100x300'));
+
+/*$img = array(
+        'src' => 'image.jpg',//path
+    'swh'=>'350',//Image proportionally larger side
+        'size'=>array(580, 280)
+);*/
+$templateProcessor->setImg('IMGD#1',array('src' => 'image.jpg','swh'=>'250'));
+
+$templateProcessor->setValue('AVTOR#2', htmlspecialchars('Barry'));
+$templateProcessor->setValue('NAME#2', htmlspecialchars('White Horse'));
+$templateProcessor->setValue('SIZES#2', htmlspecialchars('200x500'));
+$templateProcessor->setImg('IMGD#2',array('src' => 'image2.jpg','swh'=>'250'));
+
+$templateProcessor->setValue('AVTOR#3', htmlspecialchars('Backer'));
+$templateProcessor->setValue('NAME#3', htmlspecialchars('Another Side'));
+$templateProcessor->setValue('SIZES#3', htmlspecialchars('120x430'));
+$templateProcessor->setImg('IMGD#3',array('src' => 'image3.jpg','swh'=>'250'));
+//variant 2
+
+$templateProcessor->cloneRow('AVTOR', count($output['ID'])); 
+        for($i=0;$i<count($output['ID']);$i++)
+        {
+            $templateProcessor->setValue('AVTOR'.'#'.($i+1), htmlspecialchars($output['AVTOR'][$i]));
+            $templateProcessor->setValue('NAME'.'#'.($i+1), htmlspecialchars($output['PNAM'][$i]));
+//GetImg($output['ID'][$i]) my function return image path
+            $templateProcessor->setImg('IMGD'.'#'.($i+1), array('src'=>GetImg($output['ID'][$i]),'swh'=>'250'));
+        }
+//Save
+
+$templateProcessor->saveAs('testTemplate.docx');
